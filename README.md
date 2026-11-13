@@ -1,36 +1,28 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MotoVía
 
-## Getting Started
+Mapa de restricciones para motos en Barranquilla y Soledad: qué aplica ahora, dónde y por qué.
 
-First, run the development server:
+## Uso
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000
+npm test        # pruebas del motor de reglas
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Cómo actualizar los datos
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Reglas** (`data/reglas.ts`): horarios, vigencias, excepciones y fuente de cada medida. Cuando salga un decreto, edita o agrega la regla, cambia `revisadoEl` y despliega. Pon `verificado: true` solo después de leer el texto oficial.
+- **Zonas** (`data/zonas/zonas.json`): se generan con `npm run zonas` a partir de las vías de OpenStreetMap que nombra cada decreto. Son una aproximación; si un decreto cambia los límites, ajusta `scripts/construir-zonas.mjs`.
+- **Guías** (`data/articulos.ts`) y **patrocinadores** (`data/patrocinadores.ts`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Publicidad
 
-## Learn More
+- Banner: `components/Anuncio.tsx`. Solo en fichas y páginas de lectura, nunca sobre el mapa.
+- Pantalla completa: `components/Intersticial.tsx` + `lib/intersticial.ts`. Una vez por sesión, tras 3 min de uso, solo al cerrar una ficha y nunca con el GPS activo.
+- Variables en `.env.example`.
 
-To learn more about Next.js, take a look at the following resources:
+## Pruebas manuales
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`/?lat=10.981&lng=-74.781` simula una ubicación (ese punto queda dentro del Centro).

@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# copiado por postinstall
+/public/maplibre-gl-worker.mjs
+!.env.example
