@@ -24,6 +24,9 @@ const ETIQUETA: Record<string, string> = {
 };
 const CIUDAD: Record<Municipio, string> = { barranquilla: 'Barranquilla', soledad: 'Soledad' };
 const COLOR_NIVEL: Record<Nivel, string> = { rojo: '#dc2626', amarillo: '#f59e0b', verde: '#16a34a' };
+const TEXTO_NIVEL: Record<Nivel, string> = { rojo: 'No circular', amarillo: 'Con restricciones', verde: 'Sin restricciones' };
+const MUNICIPIOS: Municipio[] = ['barranquilla', 'soledad'];
+const EFECTOS_LEYENDA = ['prohibido', 'sin-parrillero', 'sin-parrillero-hombre', 'parrillero-inscrito', 'inactiva'] as const;
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
 const efectosPosibles = (r: Regla): Efecto[] => [...(r.franjas ?? []).map((f) => f.efecto), ...(r.efectoBase ? [r.efectoBase] : [])];
@@ -52,6 +55,8 @@ export default function Inicio() {
   const [ahora, setAhora] = useState(() => new Date());
   const [simulada, setSimulada] = useState<Date | null>(null);
   const [panelHora, setPanelHora] = useState(false);
+  const [detalle, setDetalle] = useState(false);
+  const [leyenda, setLeyenda] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todo');
   const [zona, setZona] = useState<string | null>(null);
   const [pos, setPos] = useState<[number, number] | null>(ubicacionSimulada);
@@ -94,6 +99,7 @@ export default function Inicio() {
 
   const alTocarZona = useCallback((id: string | null) => {
     setPanelHora(false);
+    setDetalle(false);
     setZona(id);
   }, []);
 
@@ -126,42 +132,74 @@ export default function Inicio() {
     <div className="relative h-full w-full overflow-hidden">
       <Mapa estados={estados} seleccion={zona} ubicacion={pos} onZona={alTocarZona} />
 
-      {/* Estado "ahora mismo" */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <section aria-label="Estado ahora" className="pointer-events-auto mx-auto w-full max-w-xl rounded-2xl bg-slate-950/95 p-3 text-white shadow-lg">
-          <div className="flex items-start justify-between gap-3">
-            <ul className="min-w-0 flex-1 space-y-1.5">
-              {(['barranquilla', 'soledad'] as Municipio[]).map((mun) => (
-                <li key={mun} className="flex items-start gap-2 text-sm leading-tight">
-                  <span aria-hidden className="mt-1 size-3 shrink-0 rounded-full" style={{ background: COLOR_NIVEL[semaforo(activas, mun)] }} />
-                  <span><span className="font-bold">{CIUDAD[mun]}:</span> {fraseEstado(mun, activas, vigentes, cuando, digito)}</span>
-                </li>
-              ))}
-            </ul>
+      {/* Estado "ahora mismo": una barra baja que se despliega al tocarla, para dejarle la pantalla al mapa. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-1.5 p-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <section aria-label="Estado ahora" className="pointer-events-auto mx-auto w-full max-w-xl rounded-2xl bg-slate-950/95 text-white shadow-lg">
+          <div className="flex items-stretch gap-1 p-1">
             <button
-              onClick={() => { setPanelHora((v) => !v); setZona(null); }}
-              aria-expanded={panelHora}
-              className={`min-h-11 shrink-0 rounded-xl px-3 text-sm font-bold ${simulada ? 'bg-yellow-300 text-slate-950' : 'bg-white/10 text-white'}`}
+              onClick={() => { setDetalle((v) => !v); setPanelHora(false); }}
+              aria-expanded={detalle}
+              aria-label="Ver el detalle del estado de cada ciudad"
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left"
             >
-              {simulada ? `${DIAS[m.dia]} ${hora12(cuando)}` : `Ahora · ${hora12(cuando)}`}
+              {MUNICIPIOS.map((mun) => {
+                const nivel = semaforo(activas, mun);
+                return (
+                  <span key={mun} className="flex min-w-0 items-center gap-1.5">
+                    <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: COLOR_NIVEL[nivel] }} />
+                    <span className="min-w-0 leading-none">
+                      <span className="block truncate text-[13px] font-bold">{CIUDAD[mun]}</span>
+                      <span className="block truncate text-[11px] text-slate-300">{TEXTO_NIVEL[nivel]}</span>
+                    </span>
+                  </span>
+                );
+              })}
+              <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={`ml-auto shrink-0 text-slate-400 ${detalle ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+            <button
+              onClick={() => { setPanelHora((v) => !v); setDetalle(false); setZona(null); }}
+              aria-expanded={panelHora}
+              aria-label={`Cambiar la hora consultada. Ahora muestra ${hora12(cuando)}`}
+              className={`min-h-11 shrink-0 rounded-xl px-3 text-[13px] font-bold ${simulada ? 'bg-yellow-300 text-slate-950' : 'bg-white/10 text-white'}`}
+            >
+              {simulada ? `${DIAS[m.dia]} ${hora12(cuando)}` : hora12(cuando)}
             </button>
           </div>
-          {cambio && (
-            <p className="mt-2 border-t border-white/10 pt-2 text-xs text-slate-300">
-              En {duracion(cuando, cambio.cuando)} ({hora12(cambio.cuando)}) en {CIUDAD[cambio.regla.municipio]}: {cambio.regla.titulo.toLowerCase()}{' → '}
-              {cambio.efecto ? TEXTO_EFECTO[cambio.efecto].toLowerCase() : 'deja de aplicar'}
-            </p>
+
+          {detalle && (
+            <div className="border-t border-white/10 px-3 pb-3 pt-2">
+              <ul className="space-y-1.5">
+                {MUNICIPIOS.map((mun) => (
+                  <li key={mun} className="text-sm leading-snug">
+                    <span className="font-bold">{CIUDAD[mun]}:</span> {fraseEstado(mun, activas, vigentes, cuando, digito)}
+                  </li>
+                ))}
+              </ul>
+              {cambio && (
+                <p className="mt-2 text-xs text-slate-300">
+                  En {duracion(cuando, cambio.cuando)} ({hora12(cambio.cuando)}) en {CIUDAD[cambio.regla.municipio]}: {cambio.regla.titulo.toLowerCase()}{' → '}
+                  {cambio.efecto ? TEXTO_EFECTO[cambio.efecto].toLowerCase() : 'deja de aplicar'}
+                </p>
+              )}
+              <p className="mt-2 text-[11px] text-slate-400">
+                Guía informativa, revisada el {ULTIMA_REVISION.split('-').reverse().join('/')}. No reemplaza el decreto oficial.
+              </p>
+            </div>
           )}
-          {panelHora && <PanelHora cuando={cuando} simulada={!!simulada} onElegir={(d, cerrar) => { setSimulada(d); if (cerrar) setPanelHora(false); }} />}
+          {panelHora && (
+            <div className="px-3 pb-3">
+              <PanelHora cuando={cuando} simulada={!!simulada} onElegir={(d, cerrar) => { setSimulada(d); if (cerrar) setPanelHora(false); }} />
+            </div>
+          )}
         </section>
 
-        <div role="group" aria-label="Filtrar restricciones" className="pointer-events-auto mx-auto flex w-full max-w-xl gap-2 overflow-x-auto">
+        <div role="group" aria-label="Filtrar restricciones" className="pointer-events-auto mx-auto flex w-full max-w-xl gap-1.5 overflow-x-auto">
           {([['todo', 'Todo'], ['circulacion', 'Dónde no circular'], ['parrillero', 'Parrillero']] as [Filtro, string][]).map(([f, t]) => (
             <button
               key={f}
               onClick={() => setFiltro(f)}
               aria-pressed={filtro === f}
-              className={`min-h-10 shrink-0 rounded-full border px-4 text-sm font-semibold shadow ${filtro === f ? 'border-slate-950 bg-slate-950 text-yellow-300' : 'border-slate-300 bg-white text-slate-800'}`}
+              className={`min-h-9 shrink-0 rounded-full border px-3 text-[13px] font-semibold shadow ${filtro === f ? 'border-slate-950 bg-slate-950 text-yellow-300' : 'border-slate-300 bg-white/95 text-slate-800'}`}
             >
               {t}
             </button>
@@ -169,25 +207,33 @@ export default function Inicio() {
         </div>
       </div>
 
-      {/* Leyenda + ubicación */}
+      {/* Leyenda (plegable) + ubicación */}
       {!zona && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2 p-3">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-1.5 p-2">
           <div className="flex items-end justify-between gap-3">
-            <ul aria-label="Leyenda" className="pointer-events-auto space-y-1 rounded-xl bg-white/95 p-2.5 text-xs font-medium text-slate-800 shadow">
-              {(['prohibido', 'sin-parrillero', 'sin-parrillero-hombre', 'parrillero-inscrito', 'inactiva'] as const).map((e) => (
-                <li key={e} className="flex items-center gap-2">
-                  <span aria-hidden className="size-3 rounded-sm" style={{ background: COLOR_EFECTO[e] }} />
-                  {e === 'inactiva' ? 'No aplica a esta hora' : TEXTO_EFECTO[e]}
-                </li>
-              ))}
-            </ul>
+            <div className="pointer-events-auto rounded-xl bg-white/95 text-xs font-medium text-slate-800 shadow">
+              {leyenda && (
+                <ul id="leyenda" className="space-y-1 px-2.5 pt-2.5">
+                  {EFECTOS_LEYENDA.map((e) => (
+                    <li key={e} className="flex items-center gap-2">
+                      <span aria-hidden className="size-3 rounded-sm" style={{ background: COLOR_EFECTO[e] }} />
+                      {e === 'inactiva' ? 'No aplica a esta hora' : TEXTO_EFECTO[e]}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button onClick={() => setLeyenda((v) => !v)} aria-expanded={leyenda} aria-controls="leyenda" className="flex min-h-9 items-center gap-1.5 px-2.5 font-semibold">
+                {!leyenda && EFECTOS_LEYENDA.slice(0, 4).map((e) => <span key={e} aria-hidden className="size-2.5 rounded-sm" style={{ background: COLOR_EFECTO[e] }} />)}
+                {leyenda ? 'Ocultar' : 'Colores'}
+              </button>
+            </div>
             <button
               onClick={alternarUbicacion}
               aria-pressed={!!pos || siguiendo}
               aria-label={pos || siguiendo ? 'Dejar de mostrar mi ubicación' : 'Mostrar mi ubicación'}
-              className={`pointer-events-auto flex size-14 items-center justify-center rounded-full shadow-lg ${pos || siguiendo ? 'bg-sky-700 text-white' : 'bg-white text-slate-900'}`}
+              className={`pointer-events-auto flex size-12 items-center justify-center rounded-full shadow-lg ${pos || siguiendo ? 'bg-sky-700 text-white' : 'bg-white text-slate-900'}`}
             >
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <circle cx="12" cy="12" r="3.5" /><path d="M12 2v3m0 14v3M2 12h3m14 0h3" />
               </svg>
             </button>
@@ -202,12 +248,10 @@ export default function Inicio() {
               ) : 'Buscando tu ubicación…')}
             </div>
           )}
-          <p className="pointer-events-auto mx-auto rounded-xl bg-white/90 px-3 py-1 text-center text-[11px] leading-snug text-slate-700 shadow">
-            Guía informativa · revisada el {ULTIMA_REVISION.split('-').reverse().join('/')} · no reemplaza el decreto oficial
-            <br />
-            Mapa ©{' '}
-            <a className="underline" href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> ©{' '}
-            <a className="underline" href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a> ©{' '}
+          <p className="pointer-events-auto self-end rounded bg-white/80 px-1.5 text-[10px] leading-4 text-slate-700">
+            ©{' '}
+            <a className="underline" href="https://openfreemap.org" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>{' · '}
+            <a className="underline" href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>{' · '}
             <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
           </p>
         </div>
@@ -253,7 +297,7 @@ function PanelHora({ cuando, simulada, onElegir }: { cuando: Date; simulada: boo
   const { fecha, minutos } = momentoColombia(cuando);
   const hhmm = `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
   return (
-    <div className="mt-3 border-t border-white/10 pt-3">
+    <div className="border-t border-white/10 pt-2">
       <p className="mb-2 text-xs text-slate-300">¿Vas a salir más tarde? Mira cómo queda el mapa a otra hora.</p>
       <div className="flex flex-wrap gap-2">
         {[['06:00', '6 a.m.'], ['12:00', '12 m.'], ['19:00', '7 p.m.'], ['23:00', '11 p.m.']].map(([h, t]) => (

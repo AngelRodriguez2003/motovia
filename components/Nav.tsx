@@ -20,9 +20,9 @@ export default function Nav() {
             key={i.href}
             href={i.href}
             aria-current={activo ? 'page' : undefined}
-            className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold ${activo ? 'text-yellow-300' : 'text-slate-300'}`}
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center text-[11px] font-semibold leading-tight ${activo ? 'text-yellow-300' : 'text-slate-300'}`}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={i.d} /></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={i.d} /></svg>
             {i.texto}
           </Link>
         );
