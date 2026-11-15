@@ -4,6 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Pagina from "@/components/Pagina";
 import ReglaTarjeta from "@/components/ReglaTarjeta";
+import JsonLd from "@/components/JsonLd";
+import { articulo, migas, og } from "@/lib/seo";
 import { ARTICULOS } from "@/data/articulos";
 import { REGLAS } from "@/data/reglas";
 
@@ -14,7 +16,9 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/aprende/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const a = ARTICULOS.find((x) => x.slug === slug);
-  return a ? { title: a.titulo, description: a.resumen } : {};
+  if (!a) return {};
+  const ruta = `/aprende/${a.slug}`;
+  return { title: a.titulo, description: a.resumen, alternates: { canonical: ruta }, openGraph: og({ type: "article", title: a.titulo, description: a.resumen, url: ruta }) };
 }
 
 export default function Page({ params }: PageProps<"/aprende/[slug]">) {
@@ -33,6 +37,7 @@ async function Articulo({ params }: Pick<PageProps<"/aprende/[slug]">, "params">
 
   return (
     <Pagina titulo={a.titulo} intro={a.resumen}>
+      <JsonLd datos={[articulo(a.titulo, a.resumen, `/aprende/${a.slug}`), migas([["Inicio", "/"], ["Guías", "/aprende"], [a.titulo, `/aprende/${a.slug}`]])]} />
       {a.secciones.map((s) => (
         <section key={s.titulo} className="rounded-2xl border border-slate-200 bg-white p-4">
           <h2 className="text-lg font-bold text-slate-900">{s.titulo}</h2>

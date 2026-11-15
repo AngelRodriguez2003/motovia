@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import { og } from "@/lib/seo";
 import Link from "next/link";
 import Pagina from "@/components/Pagina";
 import { ARTICULOS } from "@/data/articulos";
 
 export const metadata: Metadata = {
-  title: "Guía para motociclistas",
-  description: "Explicaciones cortas de las restricciones para motos en Barranquilla y Soledad: horario nocturno, parrillero, centro, documentos y multas.",
+  title: "Guía para motociclistas de Barranquilla y Soledad: normas, parrillero y multas",
+  description: "Explicaciones cortas de las restricciones para motos en Barranquilla y Soledad: horario nocturno, parrillero, pico y placa, Centro, documentos y multas 2026.",
+  alternates: { canonical: "/aprende" },
+  openGraph: og({ url: "/aprende" }),
 };
 
 export default function Aprende() {
