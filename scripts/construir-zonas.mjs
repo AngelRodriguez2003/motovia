@@ -1,7 +1,7 @@
 // Genera data/zonas/zonas.json. Uso: npm run zonas
 // Vías: teselas vectoriales de OpenFreeMap (datos de OpenStreetMap). Límites municipales: Nominatim.
 // Las zonas son una APROXIMACIÓN trazada sobre las vías que nombra cada decreto.
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 
@@ -42,7 +42,16 @@ async function tesela([x, y]) {
     if (f.properties.class === 'busway') buses.push(...lineas(f, x, y));
   }
 }
-for (let i = 0; i < teselas.length; i += 8) await Promise.all(teselas.slice(i, i + 8).map(tesela));
+// ZONAS_CACHE=<archivo.json> guarda las vías descargadas para no repetir la descarga al ajustar el script.
+const CACHE = process.env.ZONAS_CACHE;
+if (CACHE && existsSync(CACHE)) {
+  const c = JSON.parse(readFileSync(CACHE, 'utf8'));
+  for (const [n, ls] of c.porNombre) porNombre.set(n, ls);
+  buses.push(...c.buses);
+} else {
+  for (let i = 0; i < teselas.length; i += 8) await Promise.all(teselas.slice(i, i + 8).map(tesela));
+  if (CACHE) writeFileSync(CACHE, JSON.stringify({ porNombre: [...porNombre], buses }));
+}
 
 // Añade un punto cada ~15 m para que los cruces entre vías se ubiquen con precisión.
 function densificar(l) {
@@ -54,8 +63,14 @@ function densificar(l) {
   out.push(l.at(-1));
   return out;
 }
-const vias = (re) => {
-  const out = [...porNombre].filter(([n]) => new RegExp(re).test(n)).flatMap(([, ls]) => ls).filter((l) => l.length > 1).map(densificar);
+// `caja` = [oeste, sur, este, norte] limita la búsqueda (hay muchas "Calle 17" en la región).
+const vias = (re, caja) => {
+  const dentro = (p) => !caja || (p[0] >= caja[0] && p[1] >= caja[1] && p[0] <= caja[2] && p[1] <= caja[3]);
+  const out = [...porNombre]
+    .filter(([n]) => new RegExp(re).test(n))
+    .flatMap(([, ls]) => ls)
+    .filter((l) => l.length > 1 && l.some(dentro))
+    .map(densificar);
   if (!out.length) throw new Error(`sin geometría para ${re}`);
   return out;
 };
@@ -110,6 +125,32 @@ function cadena(lineas, desde, hasta) {
   return simplificar([desde, ...medio, hasta], 30);
 }
 
+// Recorta una vía al tramo entre dos puntos, conservando su trazado real.
+function recorte(lineas, desde, hasta) {
+  const kx = Math.cos((desde[1] * Math.PI) / 180);
+  const [ex, ey] = [(hasta[0] - desde[0]) * kx, hasta[1] - desde[1]];
+  const largo2 = ex * ex + ey * ey;
+  const largo = Math.sqrt(largo2) * 111320;
+  const ok = (p) => {
+    const [px, py] = [(p[0] - desde[0]) * kx, p[1] - desde[1]];
+    const t = (px * ex + py * ey) / largo2;
+    const desvio = (Math.abs(px * ey - py * ex) / Math.sqrt(largo2)) * 111320;
+    return t >= 0 && t <= 1 && desvio <= Math.max(120, largo * 0.45);
+  };
+  const out = [];
+  for (const l of lineas) {
+    let actual = [];
+    for (const p of l) {
+      if (ok(p)) actual.push(p);
+      else { if (actual.length > 1) out.push(actual); actual = []; }
+    }
+    if (actual.length > 1) out.push(actual);
+  }
+  return out;
+}
+/** Igual que `recorte`, pero pasando por puntos intermedios (para vías curvas como la Circunvalar). */
+const recortePor = (lineas, puntos) => puntos.slice(1).flatMap((p, i) => recorte(lineas, puntos[i], p));
+
 // Douglas-Peucker en metros.
 function simplificar(pts, tol) {
   if (pts.length < 3) return pts;
@@ -133,16 +174,14 @@ function distSeg(p, a, b) {
 const r5 = (c) => (typeof c[0] === 'number' ? [+c[0].toFixed(5), +c[1].toFixed(5)] : c.map(r5));
 const feat = (id, type, coordinates) => ({ type: 'Feature', properties: { id }, geometry: { type, coordinates: r5(coordinates) } });
 
-const cl30 = vias('^Avenida Calle 30$'), cr46 = vias('^Avenida Carrera 46$'), cr38 = vias('^(Avenida )?Carrera 38$');
+const cl30 = vias('^Avenida Calle 30$'), cl30todo = vias('^(Avenida )?Calle 30$'), cr46 = vias('^Avenida Carrera 46$'), cr38 = vias('^(Avenida )?Carrera 38$');
 const cl45 = vias('^Avenida Murillo$'), cl72 = vias('^Calle 72$'), cr65 = vias('^Carrera 65$');
 const circ = vias('^Avenida Circunvalar$'), portuaria = vias('^(Corredor Portuario|Avenida Portuaria)$');
-// Si las teselas no traen carriles de bus, las troncales de Transmetro son Murillo y Olaya Herrera (Cra 46).
-const transmetro = buses.length ? buses : [...cl45, ...cr46];
-console.log(`carriles de bus: ${buses.length} tramos`);
 
 // Centro: Calle 30 – Cra 46 – Murillo (Cl 45) – Cra 38
-const centro = [cruce(cl30, cr46, 'Cl30×Cr46'), cruce(cl45, cr46, 'Cl45×Cr46'), cruce(cl45, cr38, 'Cl45×Cr38'), cruce(cl30, cr38, 'Cl30×Cr38')];
-centro.push(centro[0]);
+const c1 = cruce(cl30, cr46, 'Cl30×Cr46'), c2 = cruce(cl45, cr46, 'Cl45×Cr46');
+const c3 = cruce(cl45, cr38, 'Cl45×Cr38'), c4 = cruce(cl30, cr38, 'Cl30×Cr38');
+const centro = [c1, c2, c3, c4, c1];
 
 // Parrillero hombre: Calle 72 – Cra 38 – Circunvalar – Cra 65
 const a = cruce(cl72, cr38, 'Cl72×Cr38');
@@ -151,6 +190,51 @@ const c = cruce(cr65, circ, 'Cr65×Circunvalar');
 const d = cruce(cr38, circ, 'Cr38×Circunvalar');
 const parrillero = [a, b, ...cadena(cr65, b, c).slice(1), ...cadena(circ, c, d).slice(1), ...cadena(cr38, d, a).slice(1)];
 if (parrillero.at(-1) !== a) parrillero.push(a);
+
+// Transmetro (prohibido): Murillo entre la Cra 1 (Av. Las Torres) y la Cra 46; Cra 46 entre calles 30 y 74.
+// De la Cra 1 hacia Soledad la Murillo ya no está en la lista del decreto.
+const cr1 = vias('^Carrera 1$', [-74.81, 10.925, -74.795, 10.935]);
+const finMurillo = cruce(cl45, cr1, 'Murillo×Cr1');
+const cl74 = vias('^Calle 74$', [-74.83, 10.99, -74.79, 11.01]);
+const transmetro = [
+  ...recorte(cl45, c2, finMurillo),
+  ...recorte(cr46, c1, cruce(cr46, cl74, 'Cr46×Cl74')),
+];
+
+// Corredores donde el parrillero debe estar inscrito (24 h).
+const cordialidad = vias('^Avenida de La Cordialidad$');
+const via40 = vias('^Vía 40$'), rio = vias('^Avenida del Río$');
+const salida46 = vias('^Salida a Avenida Carrera 46$');
+const ESTE = [-74.80, 10.955, -74.755, 10.995];
+const cl4 = vias('^Calle 4$', ESTE), cr30 = vias('^Carrera 30$', ESTE), cl6 = vias('^Calle 6$', ESTE);
+const pCirc = [
+  cruce(circ, cl45, 'Circunvalar×Murillo'),
+  cruce(circ, cordialidad, 'Circunvalar×Cordialidad'),
+  d,
+  cruce(circ, salida46, 'Circunvalar×Cr46'),
+  cruce(circ, via40, 'Circunvalar×Vía40'),
+];
+const cl4x38 = cruce(cl4, cr38, 'Cl4×Cr38'), cl4x30 = cruce(cl4, cr30, 'Cl4×Cr30');
+const inscrito = [
+  ...recorte(cl4, cl4x38, cl4x30),
+  ...recorte(cr30, cl4x30, cruce(cl6, cr30, 'Cl6×Cr30')),
+  ...recorte(cl30todo, cruce(cl30todo, circ, 'Cl30×Circunvalar'), c4),
+  ...recorte(cordialidad, pCirc[1], cruce(cordialidad, cl45, 'Cordialidad×Murillo')),
+  // La Cra 38 entre calles 30 y 45 (c4→c3) es borde del Centro: allí manda la prohibición del Centro,
+  // así que no se dibuja como corredor para no dar a entender que se puede pasar.
+  ...recorte(cr38, cl4x38, c4), ...recorte(cr38, c3, a), ...recorte(cr38, a, d),
+  ...recortePor(circ, pCirc),
+  ...via40,
+  ...rio,
+];
+
+// Centro de Soledad: calles 17 a 19 entre carreras 18 y 21.
+const SOL = [-74.79, 10.895, -74.74, 10.935];
+const s17 = vias('^Calle 17$', SOL), s19 = vias('^Calle 19$', SOL), s18k = vias('^Carrera 18$', SOL), s21k = vias('^Carrera 21$', SOL);
+const sc = [cruce(s17, s18k, 'Sol Cl17×Cr18'), cruce(s17, s21k, 'Sol Cl17×Cr21'), cruce(s19, s21k, 'Sol Cl19×Cr21'), cruce(s19, s18k, 'Sol Cl19×Cr18')];
+sc.push(sc[0]);
+
+const fino = (ls) => ls.map((l) => simplificar(l, 8)).filter((l) => l.length > 1);
 
 const fc = {
   type: 'FeatureCollection',
@@ -161,8 +245,11 @@ const fc = {
     feat('sol-municipio', 'Polygon', [await limite('Soledad')]),
     feat('baq-centro', 'Polygon', [centro]),
     feat('baq-parrillero-norte', 'Polygon', [parrillero]),
-    feat('baq-transmetro', 'MultiLineString', transmetro.map((l) => simplificar(l, 8))),
-    feat('baq-portuario', 'MultiLineString', portuaria.map((l) => simplificar(l, 8))),
+    feat('sol-centro', 'Polygon', [sc]),
+    // El orden importa: lo último se dibuja encima.
+    feat('baq-inscrito', 'MultiLineString', fino(inscrito)),
+    feat('baq-transmetro', 'MultiLineString', fino(transmetro)),
+    feat('baq-portuario', 'MultiLineString', fino(portuaria)),
   ],
 };
 writeFileSync(new URL('../data/zonas/zonas.json', import.meta.url), JSON.stringify(fc));

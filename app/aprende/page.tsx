@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Anuncio from "@/components/Anuncio";
 import Pagina from "@/components/Pagina";
 import { ARTICULOS } from "@/data/articulos";
 
@@ -27,7 +26,6 @@ export default function Aprende() {
           <Link key={h} href={h} className="flex min-h-14 items-center justify-center rounded-2xl bg-slate-950 px-3 text-center text-sm font-bold text-yellow-300">{t}</Link>
         ))}
       </div>
-      <Anuncio slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_APRENDE} />
     </Pagina>
   );
 }

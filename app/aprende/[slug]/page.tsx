@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import Anuncio from "@/components/Anuncio";
 import Pagina from "@/components/Pagina";
 import ReglaTarjeta from "@/components/ReglaTarjeta";
 import { ARTICULOS } from "@/data/articulos";
@@ -54,7 +53,6 @@ async function Articulo({ params }: Pick<PageProps<"/aprende/[slug]">, "params">
       )}
 
       <Link href="/" className="flex min-h-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-yellow-300">Ver en el mapa</Link>
-      <Anuncio slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_APRENDE} />
       <Link href="/aprende" className="block text-center text-sm font-semibold text-sky-800 underline">← Todas las guías</Link>
     </Pagina>
   );

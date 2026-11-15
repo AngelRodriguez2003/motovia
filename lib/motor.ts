@@ -76,7 +76,14 @@ export function reglasVigentes(reglas: Regla[], d: Date): Regla[] {
   return reglas.filter((r) => enVigencia(r, m.fecha) || efectoDe(r, m) !== null);
 }
 
-const PESO: Record<Efecto, number> = { prohibido: 3, 'sin-parrillero': 2, 'sin-parrillero-hombre': 2, aviso: 0 };
+const PESO: Record<Efecto, number> = {
+  prohibido: 4,
+  'pico-placa': 3,
+  'sin-parrillero': 2,
+  'sin-parrillero-hombre': 2,
+  'parrillero-inscrito': 1,
+  aviso: 0,
+};
 
 export type Nivel = 'rojo' | 'amarillo' | 'verde';
 
@@ -114,6 +121,23 @@ export function aplicaPlaca(reglas: Regla[], digito: number, d: Date, municipio:
   );
 }
 
+/** Dígitos con pico y placa en la fecha dada (vacío si ese día no hay). */
+export function digitosDe(r: Regla, d: Date): number[] {
+  return r.digitos?.[momentoColombia(d).dia] ?? [];
+}
+
+/**
+ * Ajusta el pico y placa a la placa del usuario: si su dígito está restringido, para él
+ * es una prohibición; si no lo está, la regla no le aplica. Sin dígito, se deja igual.
+ */
+export function personalizar(activas: Activa[], d: Date, digito: number | null): Activa[] {
+  if (digito === null) return activas;
+  return activas.flatMap((a) => {
+    if (a.efecto !== 'pico-placa') return [a];
+    return digitosDe(a.regla, d).includes(digito) ? [{ ...a, efecto: 'prohibido' as const }] : [];
+  });
+}
+
 export const hayPicoYPlaca = (reglas: Regla[], municipio: Municipio) =>
   reglas.some((r) => r.municipio === municipio && r.digitos);
 
@@ -135,5 +159,7 @@ export const TEXTO_EFECTO: Record<Efecto, string> = {
   prohibido: 'Prohibido circular',
   'sin-parrillero': 'Solo sin parrillero',
   'sin-parrillero-hombre': 'Sin parrillero hombre',
+  'parrillero-inscrito': 'Parrillero solo inscrito',
+  'pico-placa': 'Pico y placa',
   aviso: 'Ten en cuenta',
 };

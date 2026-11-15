@@ -1,12 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
-import Script from "next/script";
 import RegistroSW from "@/components/RegistroSW";
 import { SITIO } from "@/lib/sitio";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const ADSENSE = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITIO.url),
@@ -29,14 +27,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="h-full">
         {children}
         <RegistroSW />
-        {ADSENSE && (
-          <Script
-            async
-            strategy="afterInteractive"
-            crossOrigin="anonymous"
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE}`}
-          />
-        )}
       </body>
     </html>
   );

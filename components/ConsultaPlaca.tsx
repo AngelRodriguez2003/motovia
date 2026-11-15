@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { REGLAS, type Municipio } from '@/data/reglas';
-import { aplicaPlaca, hayPicoYPlaca, reglasActivas, TEXTO_EFECTO } from '@/lib/motor';
+import { aplicaPlaca, hayPicoYPlaca, momentoColombia, personalizar, reglasActivas, TEXTO_EFECTO } from '@/lib/motor';
 import { COLOR_EFECTO } from './ReglaTarjeta';
 
 const CLAVE = 'motovia:placa';
@@ -46,7 +46,8 @@ export default function ConsultaPlaca() {
   const nombre = CIUDADES.find(([c]) => c === ciudad)![1];
   const conPico = hayPicoYPlaca(REGLAS, ciudad);
   const semana = Array.from({ length: 7 }, (_, i) => new Date(hoy.getTime() + i * 86_400_000));
-  const generales = reglasActivas(REGLAS, hoy).filter((a) => a.regla.municipio === ciudad && a.efecto !== 'aviso');
+  const pico = REGLAS.find((r) => r.municipio === ciudad && r.digitos);
+  const generales = personalizar(reglasActivas(REGLAS, hoy), hoy, digito).filter((a) => a.regla.municipio === ciudad && a.efecto !== 'aviso');
 
   return (
     <>
@@ -72,24 +73,26 @@ export default function ConsultaPlaca() {
         <section aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-4">
           <h2 className="text-lg font-bold text-slate-900">Placa terminada en {digito} · {nombre}</h2>
           {conPico ? (
-            <ul className="mt-3 divide-y divide-slate-100">
-              {semana.map((d, i) => {
-                const r = aplicaPlaca(REGLAS, digito, d, ciudad);
-                return (
-                  <li key={i} className="flex items-center justify-between py-2 text-sm">
-                    <span className={i === 0 ? 'font-bold' : ''}>{i === 0 ? 'Hoy' : DIAS[d.getDay()]}</span>
-                    <span className="font-semibold" style={{ color: r.length ? COLOR_EFECTO.prohibido : '#15803d' }}>
-                      {r.length ? 'Con restricción' : 'Puede circular'}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <ul className="mt-3 divide-y divide-slate-100">
+                {semana.map((d, i) => {
+                  const r = aplicaPlaca(REGLAS, digito, d, ciudad);
+                  return (
+                    <li key={i} className="flex items-center justify-between py-2 text-sm">
+                      <span className={i === 0 ? 'font-bold' : ''}>{i === 0 ? 'Hoy' : DIAS[momentoColombia(d).dia]}</span>
+                      <span className="font-semibold" style={{ color: r.length ? COLOR_EFECTO.prohibido : '#15803d' }}>
+                        {r.length ? 'No circula de 5 a.m. a 10 p.m.' : 'Puede circular'}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {pico?.advertencia && <p className="mt-3 text-xs font-medium text-amber-800">⚠ {pico.advertencia}</p>}
+              <p className="mt-2 text-xs text-slate-600">Aparte del pico y placa, de 11 p.m. a 5 a.m. rige la restricción nocturna para todas las placas.</p>
+            </>
           ) : (
             <p className="mt-2 text-[15px] leading-relaxed text-slate-800">
-              {ciudad === 'barranquilla'
-                ? 'En Barranquilla las restricciones para motos no dependen del número de la placa: aplican por zona y por hora, iguales para todos.'
-                : 'No tenemos un pico y placa para motos confirmado con el decreto oficial de Soledad. Otros sitios publican dígitos distintos entre sí, así que preferimos no mostrarte un dato que pueda estar mal. Confírmalo con el Instituto de Tránsito de Soledad.'}
+              En {nombre} las restricciones para motos no dependen del número de la placa: aplican por zona y por hora, iguales para todos.
             </p>
           )}
         </section>

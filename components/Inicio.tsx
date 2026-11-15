@@ -3,14 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { REGLAS, ULTIMA_REVISION, type Efecto, type Municipio, type Regla } from '@/data/reglas';
 import {
-  duracion, efectoDe, fechaColombia, hora12, masGrave, momentoColombia, proximoCambio,
+  digitosDe, duracion, fechaColombia, hora12, masGrave, momentoColombia, personalizar, proximoCambio,
   reglasActivas, reglasVigentes, semaforo, TEXTO_EFECTO, type Activa, type Nivel,
 } from '@/lib/motor';
 import { CERCA_M, ZONAS, esMunicipio, ubicar } from '@/lib/zonas';
 import Mapa, { type EstadoZona } from './Mapa';
 import ReglaTarjeta, { COLOR_EFECTO } from './ReglaTarjeta';
-import Anuncio from './Anuncio';
-import Intersticial, { useIntersticial } from './Intersticial';
 
 type Filtro = 'todo' | 'circulacion' | 'parrillero';
 
@@ -18,6 +16,8 @@ const ETIQUETA: Record<string, string> = {
   'baq-centro': 'Centro',
   'baq-parrillero-norte': 'Sin parrillero hombre',
   'baq-transmetro': 'Transmetro',
+  'baq-inscrito': 'Parrillero inscrito',
+  'sol-centro': 'Centro de Soledad',
   'baq-portuario': 'Corredor portuario',
   'baq-municipio': 'Barranquilla',
   'sol-municipio': 'Soledad',
@@ -29,7 +29,7 @@ const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const efectosPosibles = (r: Regla): Efecto[] => [...(r.franjas ?? []).map((f) => f.efecto), ...(r.efectoBase ? [r.efectoBase] : [])];
 const pasaFiltro = (r: Regla, f: Filtro) =>
   f === 'todo' ||
-  efectosPosibles(r).some((e) => (f === 'circulacion' ? e === 'prohibido' : e === 'sin-parrillero' || e === 'sin-parrillero-hombre'));
+  efectosPosibles(r).some((e) => (f === 'circulacion' ? e === 'prohibido' || e === 'pico-placa' : e.includes('parrillero')));
 
 function ubicacionSimulada(): [number, number] | null {
   const q = new URLSearchParams(window.location.search);
@@ -37,7 +37,18 @@ function ubicacionSimulada(): [number, number] | null {
   return q.has('lat') && q.has('lng') && Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : null;
 }
 
+/** Último dígito de la placa guardado en "Mi placa" (o null). */
+function placaGuardada(): number | null {
+  try {
+    const d = JSON.parse(localStorage.getItem('motovia:placa') ?? 'null')?.digito;
+    return Number.isInteger(d) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Inicio() {
+  const [digito] = useState(placaGuardada);
   const [ahora, setAhora] = useState(() => new Date());
   const [simulada, setSimulada] = useState<Date | null>(null);
   const [panelHora, setPanelHora] = useState(false);
@@ -47,7 +58,6 @@ export default function Inicio() {
   const [siguiendo, setSiguiendo] = useState(false);
   const [errorGps, setErrorGps] = useState<string | null>(null);
   const vigia = useRef<number | null>(null);
-  const { anuncio, enPausa, cerrar } = useIntersticial(siguiendo);
 
   useEffect(() => {
     const id = setInterval(() => setAhora(new Date()), 30_000);
@@ -59,7 +69,7 @@ export default function Inicio() {
 
   const cuando = simulada ?? ahora;
   const vigentes = useMemo(() => reglasVigentes(REGLAS, cuando), [cuando]);
-  const activas = useMemo(() => reglasActivas(REGLAS, cuando), [cuando]);
+  const activas = useMemo(() => personalizar(reglasActivas(REGLAS, cuando), cuando, digito), [cuando, digito]);
   const cambio = useMemo(() => proximoCambio(vigentes, cuando), [vigentes, cuando]);
 
   const estados = useMemo(() => {
@@ -80,10 +90,7 @@ export default function Inicio() {
     return out;
   }, [vigentes, activas, filtro]);
 
-  const cerrarFicha = useCallback(() => {
-    setZona(null);
-    enPausa();
-  }, [enPausa]);
+  const cerrarFicha = useCallback(() => setZona(null), []);
 
   const alTocarZona = useCallback((id: string | null) => {
     setPanelHora(false);
@@ -127,7 +134,7 @@ export default function Inicio() {
               {(['barranquilla', 'soledad'] as Municipio[]).map((mun) => (
                 <li key={mun} className="flex items-start gap-2 text-sm leading-tight">
                   <span aria-hidden className="mt-1 size-3 shrink-0 rounded-full" style={{ background: COLOR_NIVEL[semaforo(activas, mun)] }} />
-                  <span><span className="font-bold">{CIUDAD[mun]}:</span> {fraseEstado(mun, activas, vigentes, cuando)}</span>
+                  <span><span className="font-bold">{CIUDAD[mun]}:</span> {fraseEstado(mun, activas, vigentes, cuando, digito)}</span>
                 </li>
               ))}
             </ul>
@@ -141,7 +148,7 @@ export default function Inicio() {
           </div>
           {cambio && (
             <p className="mt-2 border-t border-white/10 pt-2 text-xs text-slate-300">
-              En {duracion(cuando, cambio.cuando)} ({hora12(cambio.cuando)}): {cambio.regla.titulo}{' → '}
+              En {duracion(cuando, cambio.cuando)} ({hora12(cambio.cuando)}) en {CIUDAD[cambio.regla.municipio]}: {cambio.regla.titulo.toLowerCase()}{' → '}
               {cambio.efecto ? TEXTO_EFECTO[cambio.efecto].toLowerCase() : 'deja de aplicar'}
             </p>
           )}
@@ -167,7 +174,7 @@ export default function Inicio() {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2 p-3">
           <div className="flex items-end justify-between gap-3">
             <ul aria-label="Leyenda" className="pointer-events-auto space-y-1 rounded-xl bg-white/95 p-2.5 text-xs font-medium text-slate-800 shadow">
-              {(['prohibido', 'sin-parrillero', 'sin-parrillero-hombre', 'inactiva'] as const).map((e) => (
+              {(['prohibido', 'sin-parrillero', 'sin-parrillero-hombre', 'parrillero-inscrito', 'inactiva'] as const).map((e) => (
                 <li key={e} className="flex items-center gap-2">
                   <span aria-hidden className="size-3 rounded-sm" style={{ background: COLOR_EFECTO[e] }} />
                   {e === 'inactiva' ? 'No aplica a esta hora' : TEXTO_EFECTO[e]}
@@ -215,26 +222,29 @@ export default function Inicio() {
           </header>
           <div className="space-y-3 overflow-y-auto px-4 pb-4">
             {reglasZona.length === 0 && <p className="rounded-2xl bg-white p-4 text-sm text-slate-700">No tenemos restricciones vigentes registradas para esta zona.</p>}
-            {reglasZona.map((r) => <ReglaTarjeta key={r.id} regla={r} efecto={efectoDe(r, m)} />)}
-            <Anuncio slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_FICHA} />
+            {reglasZona.map((r) => <ReglaTarjeta key={r.id} regla={r} efecto={activas.find((a) => a.regla === r)?.efecto ?? null} />)}
           </div>
         </section>
       )}
 
-      {anuncio && <Intersticial anuncio={anuncio} onCerrar={cerrar} />}
     </div>
   );
 }
 
-function fraseEstado(mun: Municipio, activas: Activa[], vigentes: Regla[], cuando: Date): string {
+function fraseEstado(mun: Municipio, activas: Activa[], vigentes: Regla[], cuando: Date, digito: number | null): string {
   const propias = activas.filter((a) => a.regla.municipio === mun);
   const total = propias.find((a) => a.efecto === 'prohibido' && esMunicipio(a.regla.zona));
   if (total) {
     const fin = proximoCambio([total.regla], cuando);
-    return `no se puede circular en moto${fin ? ` hasta las ${hora12(fin.cuando)}` : '.'}`;
+    const hasta = fin ? ` hasta las ${hora12(fin.cuando)}` : '';
+    return total.regla.digitos ? `tu placa (${digito}) tiene pico y placa${hasta || '.'}` : `no se puede circular en moto${hasta || '.'}`;
   }
-  const n = propias.filter((a) => a.efecto !== 'aviso').length;
-  if (n) return `puedes circular. Hay ${n} ${n === 1 ? 'zona o vía con restricción' : 'zonas o vías con restricción'}.`;
+  const partes: string[] = [];
+  const pico = propias.find((a) => a.efecto === 'pico-placa');
+  if (pico) partes.push(`pico y placa para placas terminadas en ${digitosDe(pico.regla, cuando).join(' y ')}`);
+  const n = propias.filter((a) => a.efecto !== 'aviso' && a.efecto !== 'pico-placa').length;
+  if (n) partes.push(`${n} ${n === 1 ? 'zona o vía con restricción' : 'zonas o vías con restricción'}`);
+  if (partes.length) return `puedes circular, con ${partes.join(' y ')}.`;
   const sinConfirmar = vigentes.some((r) => r.municipio === mun && !r.verificado);
   return `sin restricciones activas registradas${sinConfirmar ? ' (datos por confirmar)' : ''}.`;
 }

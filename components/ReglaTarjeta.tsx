@@ -5,6 +5,8 @@ export const COLOR_EFECTO: Record<Efecto | 'inactiva', string> = {
   prohibido: '#dc2626',
   'sin-parrillero': '#ea580c',
   'sin-parrillero-hombre': '#7c3aed',
+  'parrillero-inscrito': '#0f766e',
+  'pico-placa': '#b45309',
   aviso: '#0369a1',
   inactiva: '#64748b',
 };
@@ -30,11 +32,35 @@ export default function ReglaTarjeta({ regla, efecto }: { regla: Regla; efecto?:
           <dt className="font-semibold text-slate-900">Horario</dt>
           {regla.franjas.map((f) => (
             <dd key={f.desde + f.hasta}>
-              {hora(f.desde)} a {hora(f.hasta)}: {TEXTO_EFECTO[f.efecto].toLowerCase()}
+              {f.dias ? `${dias(f.dias)}, ` : 'Todos los días, '}
+              {hora(f.desde)} a {hora(f.hasta)}
               {regla.efectoBase && ` · resto del día: ${TEXTO_EFECTO[regla.efectoBase].toLowerCase()}`}
             </dd>
           ))}
         </dl>
+      )}
+
+      {regla.digitos && (
+        <table className="mt-3 w-full text-sm">
+          <caption className="text-left font-semibold text-slate-900">Placas que no circulan</caption>
+          <tbody>
+            {Object.entries(regla.digitos).map(([dia, ds]) => (
+              <tr key={dia} className="border-t border-slate-100">
+                <th scope="row" className="py-1 text-left font-normal capitalize">{DIAS[Number(dia)]}</th>
+                <td className="py-1 text-right font-bold">{ds.join(' y ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {regla.detalles && regla.detalles.length > 0 && (
+        <div className="mt-3 text-sm">
+          <p className="font-semibold text-slate-900">Lo que debes saber</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {regla.detalles.map((x) => <li key={x}>{x}</li>)}
+          </ul>
+        </div>
       )}
 
       {regla.excepciones.length > 0 && (
@@ -61,6 +87,9 @@ export default function ReglaTarjeta({ regla, efecto }: { regla: Regla; efecto?:
         {' · '}Vigente desde el {fechaLarga(regla.vigencia.desde)}{regla.vigencia.hasta ? ` hasta el ${fechaLarga(regla.vigencia.hasta)}` : ''}
         {' · '}Revisado el {fechaLarga(regla.revisadoEl)}
       </p>
+      {regla.advertencia && (
+        <p className="mt-1.5 text-xs font-medium text-amber-800">⚠ {regla.advertencia}</p>
+      )}
       {!regla.verificado && (
         <p className="mt-1.5 text-xs font-medium text-amber-800">
           ⚠ Pendiente de verificar contra el decreto oficial. Úsalo como guía, no como prueba.
@@ -69,6 +98,9 @@ export default function ReglaTarjeta({ regla, efecto }: { regla: Regla; efecto?:
     </article>
   );
 }
+
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const dias = (ds: number[]) => (ds.join() === '1,2,3,4,5' ? 'Lunes a viernes' : ds.map((d) => DIAS[d]).join(', '));
 
 function hora(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
